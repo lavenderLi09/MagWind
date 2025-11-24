@@ -15,6 +15,13 @@ We thank all the contributors for their valuable input and support.
 
 ## Purpose
 
+MagWind is a comprehensive tool for modeling the global solar coronal magnetic field, designed to support solar physics research and space weather forecasting. This package implements three magnetic field extrapolation models, including the PFSS (Potential Field Source Surface), SCS (Schatten Current Sheet), and OFF (OutFlow Field), providing researchers with a flexible framework to reconstruct coronal magnetic structures from photospheric and source surface boundary conditions.
+
+By integrating traditional potential field approaches with advanced magneto-frictional methods that account for solar wind outflow, MagWind aims to:
+- Provide efficient, parallelized computation (CPU/GPU) for large-scale magnetic field reconstruction.
+- Offer comparative analysis between potential (current-free) and non-potential field configurations.
+- Facilitate the study of open magnetic flux, coronal holes, and the heliospheric current sheet under varying solar activity conditions.
+
 ## Methods
 ### PFSS (Potential Field Source Surface) Model
 
