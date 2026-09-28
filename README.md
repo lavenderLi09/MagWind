@@ -49,3 +49,16 @@ that obtained from a magneto-frictional equbilirium, which contains a Parker sol
 it provides different open fluxes by adjusting on the solar wind velocity, thereby allowing flexible adaptation based on different solar activity and specialties 
 of events.
 
+
+## September 2026 calculation update
+
+The solver includes corrected OFF wind derivatives, radial equations, backward integration and signed-flux handling; PFSS harmonic and saved-component fixes; and SCS harmonic evaluation with a configurable PFSS/SCS interface and optional smooth blending.
+
+See [calculation changes, compatibility notes and examples](docs/calculation-update.md). Existing magnetic field files need regeneration. SCS blending is opt-in and does not enforce zero divergence.
+
+Run the CPU regression suite from the repository root:
+
+```bash
+python -m pip install -e ./codes
+PYTHONPATH="$PWD/codes" python -m unittest discover -s codes/tests -v
+```

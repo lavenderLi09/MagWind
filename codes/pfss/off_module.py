@@ -23,14 +23,15 @@ L0  = 6.995e10
 t0  = 5972.5794
 v0  = 1.16448846777562e7
 nu0 = 5.e-17*L0**2/t0
+GM  = 9.54e4
 
 def rk45_solver(rfun, x, y, dl, **kwargs):
     sig = kwargs.get('sig', 1)
     x0  = x
     k1  = rfun(x0         , y        , **kwargs)
-    k2  = rfun(x0+sig*dl/2, y+k1*dl/2, **kwargs)
-    k3  = rfun(x0+sig*dl/2, y+k2*dl/2, **kwargs)
-    k4  = rfun(x0+sig*dl  , y+k3*dl  , **kwargs)
+    k2  = rfun(x0+sig*dl/2, y+sig*k1*dl/2, **kwargs)
+    k3  = rfun(x0+sig*dl/2, y+sig*k2*dl/2, **kwargs)
+    k4  = rfun(x0+sig*dl  , y+sig*k3*dl  , **kwargs)
     k   = (k1+2*k2+2*k3+k4)/6*sig
     ret = y+k*dl
     return ret
@@ -57,31 +58,65 @@ class off_solver(pfss_solver):
     def cal_rc(self):
         r1 = self.Rs
         v1 = self.v1*v0*1e-5
-        kk = 9.54e4
-        e  = np.exp(1)
-        rc = -3/4*r1*lambertw(-4/3*(r1*v1**2/e**4/kk)**(1/3),k=-1)
+        r0 = GM/(2*v1**2)
+        rc = np.where(r0>r1,
+                      3/(r1/r0-4)*lambertw(1/3*(r1/r0-4)*(r1/r0)**(1/3)*np.exp(-1),k=-1)*r1,
+                      3/(r1/r0-4)*lambertw(1/3*(r1/r0-4)*(r1/r0)**(1/3)*np.exp(-1),k= 0)*r1
+                     )
         return np.real(rc)
 
+    def D(self, r):
+        rc = self.rc
+        if isinstance(rc,np.ndarray):
+            if rc.ndim==1:
+                rc=rc[:,None]
+        Dr = (rc/r)**4*np.exp(4*(1-rc/r)-1)
+        return Dr
+
     def vout(self, rho):
-        v1  = self.v1
-        r1  = self.Rs
+        x = np.asarray(rho)-np.log(self.rc)
+        sonic = np.abs(x) <= 2e-3
+        # Evaluate the regular branch away from W=-1; use its local series below.
+        safe_rho = np.where(sonic, np.log(self.rc)+.01, rho)
+        r   = np.exp(safe_rho)
         rc  = self.rc
-        ret = np.exp(-2*(np.exp(-rho)*rc-rc/r1+rho))*r1**2*v1
-        return ret
+        cs  = np.sqrt(GM/2/self.rc)*1e5/v0
+        if isinstance(cs,np.ndarray) and len(cs)>1:
+            if cs.ndim==1:
+                cs=cs[:,None]
+                rc=rc[:,None]
+        Dr  = self.D(r)
+        ret = np.where(r<=rc, cs*np.real(np.sqrt(-lambertw(-Dr, k=0))), cs*np.real(np.sqrt(-lambertw(-Dr,k=-1))))
+        return np.where(sonic, cs*(1+x-x**3/12+x**4/20-3*x**5/160+19*x**6/6720), ret)
 
     def d2_vout(self, rho):
-        v1  = self.v1
-        r1  = self.Rs
-        rc  = self.rc
-        ret = 2*np.exp(-2*np.exp(-rho)*rc+2*rc/r1-4*rho)*r1**2*(2*np.exp(2*rho)-5*np.exp(rho)*rc+2*rc**2)*v1
-        return ret
+        # Differentiate the transonic wind equation with respect to log(r).
+        x = np.asarray(rho)-np.log(self.rc)
+        sonic = np.abs(x) <= 2e-3
+        safe_rho = np.where(sonic, np.log(self.rc)+.01, rho)
+        r = np.exp(safe_rho)
+        v = self.vout(safe_rho)
+        dv = self.d1_vout(safe_rho)
+        cs = np.sqrt(GM/2/self.rc)*1e5/v0
+        u = (v/cs)**2
+        a = dv/v
+        da = 2*self.rc/r/(u-1)-4*(1-self.rc/r)*u*a/(u-1)**2
+        return np.where(sonic, cs*(-x/2+3*x*x/5-3*x**3/8+19*x**4/224), v*(a*a+da))
 
     def d1_vout(self, rho):
-        v1  = self.v1
-        r1  = self.Rs
+        x = np.asarray(rho)-np.log(self.rc)
+        sonic = np.abs(x) <= 2e-3
+        # Evaluate the regular branch away from W=-1; use its local series below.
+        safe_rho = np.where(sonic, np.log(self.rc)+.01, rho)
+        r   = np.exp(safe_rho)
         rc  = self.rc
-        ret = np.exp(-2*(np.exp(-rho)*rc-rc/r1+rho))*r1**2*v1
-        return ret
+        Dr  = self.D(r)
+        w   = np.where(r<=rc, np.real(lambertw(-Dr, k=0)), np.real(lambertw(-Dr, k=-1)))
+        cs  = np.sqrt(GM/2/self.rc)*1e5/v0
+        dDr = -4*(1-rc/r)*Dr
+        # Derivative with respect to rho=log(r), on either Lambert-W branch.
+        ret = cs*0.5*(-w)**0.5/Dr/(1+w)*dDr
+        return np.where(sonic, cs*(1-x*x/4+x**3/5-3*x**4/32+19*x**5/1120), ret)
 
     # def rfun(self, rho, y=None, l=0, **kwargs):
     #     y0,y1 = y
@@ -103,36 +138,41 @@ class off_solver(pfss_solver):
 
     def rfun(self, rho, y=None, l=0, **kwargs):
         y0,y1 = y
-        k1 = (4-nu0*np.exp(rho)*self.vout(rho))
-        k2 = -(l*(l+1)-3+4*nu0*np.exp(rho)*self.vout(rho)+nu0*np.exp(rho)*self.d1_vout(rho))
+        k1 = (3-nu0*np.exp(rho)*self.vout(rho))
+        k2 = -(l*(l+1)-2+3*nu0*np.exp(rho)*self.vout(rho)+nu0*np.exp(rho)*self.d1_vout(rho))
         rf1 = -k1*y1-k2*y0
         rf0 = y1
         ret = np.array([rf0,rf1])
         return ret
 
     def time_integration(self, initial, **kwargs):
-        r1    = kwargs.get('r1',self.Rs)
-        dl    = kwargs.get('dl',1e-3)
-        l     = kwargs.get('l' , 0)
-        ns    = kwargs.get('max_steps', 100000)
-        rhoc  = np.log(r1)
-        rho0  = rhoc
-        rlist = [rho0]
-        sol   = [initial]
-        iter  = 0
-        while rho0>0 and iter<=ns:
-            x = rho0
-            y = sol[-1]
-            sol.append(rk45_solver(self.rfun,x,y,dl, sig=-1,l=l))
-            rho0 = rho0-dl
-            if rho0<0:
-                rho0 = 0
-                dl   = x-0
-                sol[-1] = rk45_solver(self.rfun,0,y,dl, sig=-1, l=l)
-            rlist.append(rho0)
-        rlist = np.array(rlist)
-        sol   = np.array(sol)
-        return rlist, sol
+        r1 = kwargs.get('r1', self.Rs)
+        dl = kwargs.get('dl', 1e-3)
+        l = kwargs.get('l', 0)
+        ns = kwargs.get('max_steps', 100000)
+        rmax = kwargs.get('rmax', r1)
+        rhoc = np.log(r1)
+        rlist, sol = [rhoc], [initial]
+        for _ in range(ns):
+            x = rlist[-1]
+            if x <= 0:
+                break
+            step = min(dl, x)
+            sol.append(rk45_solver(self.rfun, x, sol[-1], step, sig=-1, l=l))
+            rlist.append(max(0., x-step))
+        if rmax > r1:
+            rlist_out, sol_out = [rhoc], [initial]
+            target = np.log(rmax)
+            for _ in range(ns):
+                x = rlist_out[-1]
+                if x >= target:
+                    break
+                step = min(dl, target-x)
+                sol_out.append(rk45_solver(self.rfun, x, sol_out[-1], step, sig=1, l=l))
+                rlist_out.append(min(target, x+step))
+            rlist = rlist[::-1]+rlist_out[1:]
+            sol = sol[::-1]+sol_out[1:]
+        return np.array(rlist), np.array(sol)
 
     def shooting_method(self, l=0, **kwargs):
         aim_i   = kwargs.get('aim_i', -10)
@@ -213,6 +253,9 @@ class off_solver(pfss_solver):
     #     return l, Hl, Gl
     
     def compute_HG(self,r,l=0,**kwargs):
+        r = np.asarray(r, dtype=float)
+        if l == 0:
+            return np.zeros_like(r), 1.0/r**2
         r_list, sol = self.shooting_method(l=l,**kwargs)
         interp_Hl   = interp1d(r_list, sol[:,0], kind='cubic')
         Gsol        = sol[:,1]+(1-nu0*np.exp(r_list)*self.vout(r_list))*sol[:,0]
@@ -234,6 +277,8 @@ class off_solver(pfss_solver):
         Blm      = kwargs.get('Blm', None)
         n_cores  = kwargs.get('n_cores', 50)
         FM       = kwargs.get('fast_mode', False)
+        if FM and os.path.exists('./OFF_temp_files'):
+            raise FileExistsError('Refusing pre-existing OFF_temp_files in the current directory')
         OF       = kwargs.get('off_file' , self.off_file)
         if Alm is None or Blm is None:
             Alm,Blm = self.compute_coefficient(**kwargs)
@@ -341,12 +386,20 @@ class off_solver(pfss_solver):
             for command in commands:
                 process = subprocess.Popen(command, shell=True)
                 processes.append(process)
-            for process in processes:
-                process.wait()
+            returncodes = [process.wait() for process in processes]
+            if any(code != 0 for code in returncodes):
+                raise RuntimeError(f"OFF child process failed: return codes {returncodes}")
             off_files = sorted(glob.glob('./OFF_temp_files/*.npy'))
+            expected = sorted(f'./OFF_temp_files/off_{m_assigned[i]:03d}_{m_assigned[i+1]:03d}.npy'
+                              for i in range(len(devices)))
+            if off_files != expected:
+                raise RuntimeError(f"OFF child output mismatch: expected {expected}, found {off_files}")
             ret = np.zeros((3,Nr,Nt,Np))
             for f in off_files:
-                ret += np.load(f)
+                partial = np.load(f)
+                if partial.shape != ret.shape or not np.isfinite(partial).all():
+                    raise RuntimeError(f"Invalid OFF child output: {f}")
+                ret += partial
             br,bt,bp = ret
             shutil.rmtree('./OFF_temp_files')
     

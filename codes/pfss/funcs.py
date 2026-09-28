@@ -66,7 +66,7 @@ def Associated_Legendre(l,m,x, **kwargs):
         raise ValueError("`m` cannot larget than `l`, or input |`x`| need to less than 1.")
     if m<0:
         m=-m
-        plm = (-1)**m*np.math.factorial(l-m)/np.math.factorial(l+m)*Associated_Legendre(l,m,x,is_array=False,**kwargs)
+        plm = (-1)**m*math.factorial(l-m)/math.factorial(l+m)*Associated_Legendre(l,m,x,is_array=False,**kwargs)
     elif l==m:
         if l<=80:
             plm = (-1)**l*float(double_factorial(2*l-1))*(1-x**2)**(l/2)
@@ -118,8 +118,8 @@ def Spherical_Harmonics(l,m,theta,phi, **kwargs):
         theta = torch.tensor(theta).to(device)
         phi   = torch.tensor(phi  ).to(device)
     Plm = Associated_Legendre(l, m, torch.cos(theta),**kwargs)
-    factorial1 = np.math.factorial(l-m)
-    factorial2 = np.math.factorial(l+m)
+    factorial1 = math.factorial(l-m)
+    factorial2 = math.factorial(l+m)
     digit1     = len(str(factorial1))
     digit2     = len(str(factorial2))
     digit0     = 300
@@ -251,7 +251,7 @@ def Brtp_lm(l,m, rr, tt, pp,**kwargs):
             Y_lm    = torch.conj(Spherical_Harmonics(l,  -m,tt,pp,Plm=P_l00))*(-1)**(-m)
             Y_lp1_m = torch.conj(Spherical_Harmonics(l+1,-m,tt,pp,Plm=P_lp1))*(-1)**(-m)
         br_lm  = (Alm_lm * l * torch.pow(rr, l - 1) - (l + 1) * Blm_lm * torch.pow(rr, -l - 2))*Y_lm
-        bp_lm  = (Alm_lm * torch.pow(rr, l-1) + Blm_lm * torch.pow(rr, -l - 2)) * 1j * m * Y_lm
+        bp_lm  = 1/torch.sin(tt)*(Alm_lm * torch.pow(rr, l-1) + Blm_lm * torch.pow(rr, -l - 2)) * 1j * m * Y_lm
         dY_dth  = 1/torch.sin(tt)*(-(l+1)*Y_lm*torch.cos(tt)+(l-m+1)*Y_lp1_m*np.sqrt((2*l+1)*(l+m+1)/(2*l+3)/(l-m+1)))
         bt_lm   = (Alm_lm*torch.pow(rr,l-1)+Blm_lm*torch.pow(rr,-l-2))*dY_dth
 

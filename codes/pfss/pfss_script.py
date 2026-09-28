@@ -420,7 +420,7 @@ if not skip_Brtp:
     print(' ###                      Step2: Building the Brtp field                     ### ')
     print(' ### ======================================================================= ### ')
     print('Device: ', torch.device(device))
-    if device != 'cpu':
+    if device != 'cpu' or fast_mode:
         if rtp_file is None:
             nr = n_r
             r_list = np.linspace(1, Rs, nr)
@@ -473,7 +473,7 @@ if not skip_Brtp:
                         Br+=br
                         Bt+=bt
                         Bp+=bp
-                        if l!=0:
+                        if m!=0:
                             br,bt,bp = Brtp_lm(l,-m,rr,tt,pp,err=err,device=device,P_l00=P_l00,P_lp1=P_lp1)
                             Br+=br
                             Bt+=bt
@@ -486,7 +486,7 @@ if not skip_Brtp:
                         Br+=br
                         Bt+=bt
                         Bp+=bp
-                        if l!=0:
+                        if m!=0:
                             br,bt,bp = Brtp_lm(l,-m,rr,tt,pp,err=err,device=device,P_l00=P_l00,P_lp1=P_lp1)
                             Br+=br
                             Bt+=bt
