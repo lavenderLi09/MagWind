@@ -2,7 +2,8 @@
 ## Authors and Contributors
 ### Lead Author
 - **Yihua Li**  
-  *Nanjing University, School of Astronomy and Space Science*  
+  *Nanjing University, School of Astronomy and Space Science*
+  *KU Leuven, Centre for mathematical Plasma Astrophysics*
   GitHub: [@lavenderLi09](https://github.com/lavenderLi09)  
   Email: yihuali@smail.nju.edu.cn
   
