@@ -1,6 +1,6 @@
 # README figure provenance
 
-These are original diagnostic figures from the September 27, 2026 validation of the August 22, 2024 OFF magnetic initialization. They are copied unchanged from that research case. They were not regenerated with the public repository's September 28 update or with the synthetic README examples.
+The two August-case PNGs are original diagnostic figures from the September 27, 2026 validation of the August 22, 2024 OFF magnetic initialization. They are copied unchanged from that research case. They were not regenerated with the public repository's September 28 update or with the synthetic README examples.
 
 ## Magnetic maps
 
@@ -34,3 +34,15 @@ These are initialization diagnostics, not the AMRVAC discrete divergence operato
 
 - `off-20240822-surface-maps.png`: `d44050d2b48eea3ab77742d143ee34077afc8040d8fc6d3f13051182a26c9010`
 - `off-derivative-correction.png`: `9f22ffcaecb7a2ea4fea82350906492446632a419e72742dccacd4dfb5c0a151`
+
+## Global field gallery
+
+The following assets were supplied for the README gallery and copied byte-for-byte. No frames, colors, parameter labels, or image content were changed. The source filenames are `maglines_trans.gif`, `off_results.gif`, and a clipboard PNG now named `global-field-overview.png`.
+
+These gallery assets are separate from the August-case diagnostics above. The source magnetogram, epoch, field-line color normalization, and generating solver revision are not independently documented here. Labels within `off_results.gif` are preserved from the supplied visualization; they are not a claim that all displayed model options are implemented in the current public API.
+
+| File | Dimensions | Frames | Size | SHA-256 |
+| --- | --- | ---: | ---: | --- |
+| `maglines_trans.gif` | 1658 × 1642 | 20 | 7.48 MiB | `ac84ebafed7b04ad5cd9eee91dc7f1dc5bedf69e91bd9a8ea73da4734219af6c` |
+| `off_results.gif` | 4056 × 3156 | 20 | 34.92 MiB | `953b90215831ff8e73c68f4dfb19feb121978104e3c6b936170597290a1cadf8` |
+| `global-field-overview.png` | 338 × 224 | 1 | 0.09 MiB | `5d4ffde10a96a0cf6aad2817c2a9620991d927d60d6a5d1788423e7fc02cb10c` |

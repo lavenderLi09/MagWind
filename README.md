@@ -4,7 +4,32 @@
 
 MagWind is a Python research package for extrapolating coronal magnetic fields from photospheric magnetograms. It combines spherical-harmonic solvers, CPU/GPU calculation paths, field-line tools, and VTK visualization exports.
 
-[Models](#models) · [Install](#installation) · [Quick start](#quick-start) · [Validation](#validation-and-recent-corrections) · [Calculation notes](docs/calculation-update.md)
+[Gallery](#global-magnetic-field-gallery) · [Models](#models) · [Install](#installation) · [Quick start](#quick-start) · [Validation](#validation-and-recent-corrections) · [Calculation notes](docs/calculation-update.md)
+
+## Global magnetic field gallery
+
+<p align="center">
+  <img src="docs/images/maglines_trans.gif" alt="Animated three-dimensional magnetic field lines around the solar surface" width="680">
+</p>
+
+*Three-dimensional field-line visualization showing coronal loops and field lines extending outward. The original GIF animation is preserved.*
+
+<p align="center">
+  <img src="docs/images/global-field-overview.png" alt="Wide view of the overall magnetic field, with field lines extending far beyond the solar surface" width="338">
+</p>
+
+*Wide view of the overall magnetic-field geometry. This supplied image is displayed at its original width.*
+
+<details>
+<summary><strong>Animated OFF results: surface map and global field views</strong> (35 MiB)</summary>
+
+![Animated OFF results combining a source-surface radial-field map, three-dimensional field lines, and the original parameter and projected views](docs/images/off_results.gif)
+
+*The original composite animation is preserved, including its parameter labels. These user-supplied gallery assets illustrate the project; their generation settings and solver revision are not independently established here, and they are not the August validation case below. [Asset details](docs/images/README.md#global-field-gallery).*
+
+</details>
+
+## August 2024 magnetic initialization
 
 ![August 22, 2024 HMI boundary and corrected OFF magnetic maps at the inner boundary, source sphere, and outer boundary](docs/images/off-20240822-surface-maps.png)
 
