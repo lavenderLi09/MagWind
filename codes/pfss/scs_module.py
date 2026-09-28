@@ -31,7 +31,7 @@ def Pnm(n, m, theta, **kwargs):
     if is_array:
         theta = torch.from_numpy(theta).to(device)
     delta = 0 if m!=0 else 1
-    ret   = np.sqrt((2-delta)*float(np.math.factorial(n-m))/float(np.math.factorial(n+m)))
+    ret   = np.sqrt((2-delta)*float(math.factorial(n-m))/float(math.factorial(n+m)))
     ret   = ret*Associated_Legendre(n,m, torch.cos(theta), **kwargs)
     if is_array:
         return ret.detach().cpu().numpy()
@@ -48,7 +48,7 @@ def DPnm(n, m, theta, **kwargs):
     P_lp1_m = kwargs.get('P_lp1_m', Associated_Legendre(n+1,m,torch.cos(theta),**kwargs))
     dL_dth = 1/torch.sin(theta)*(-(n+1)*torch.cos(theta)*P_lp0_m+(n-m+1)*P_lp1_m)
     delta = 0 if m!=0 else 1
-    ret   = np.sqrt((2-delta)*float(np.math.factorial(n-m))/float(np.math.factorial(n+m)))
+    ret   = np.sqrt((2-delta)*float(math.factorial(n-m))/float(math.factorial(n+m)))
     ret   = ret*dL_dth
     if is_array:
         return ret.detach().cpu().numpy()
@@ -72,7 +72,7 @@ def alpha_beta(n,m,tt,pp,**kwargs):
 
     beta_1nm  = (n+1)*P*torch.sin(m*pp)
     beta_2nm  = -dP_dth*torch.sin(m*pp)
-    beta_3nm  = m/torch.sin(tt)*P*torch.cos(m*pp)
+    beta_3nm  = -m/torch.sin(tt)*P*torch.cos(m*pp)
 
     alpha     = torch.stack([alpha_1nm,alpha_2nm,alpha_3nm], dim=0)
     beta      = torch.stack([beta_1nm ,beta_2nm ,beta_3nm ], dim=0)
@@ -120,6 +120,17 @@ def build_SCS_Brtp(rr,tt,pp,glm,hlm,lmax=10, **kwargs):
         Brtp = Brtp.detach().cpu().numpy()
     return Brtp
 
+def _pfss_weight_smooth(r, split_r, half_width):
+    """Return PFSS blend weight in [split_r-half_width, split_r+half_width]."""
+    if half_width <= 0:
+        return (np.asarray(r) <= split_r).astype(float)
+    lo = split_r - half_width
+    hi = split_r + half_width
+    t = (np.asarray(r, dtype=np.float64) - lo) / (hi - lo)
+    t = np.clip(t, 0.0, 1.0)
+    s = t * t * (3.0 - 2.0 * t)  # smoothstep
+    return 1.0 - s
+
 # ================
 
 class scs_solver(pfss_solver):
@@ -133,7 +144,8 @@ class scs_solver(pfss_solver):
                  Rcp      = 2.4,
                  Rtp      = 10.,
                  lmax_scs = 10,
-                 Nrtp_scs = [200,200,400]
+                 Nrtp_scs = [200,200,400],
+                 **kwargs
                 ):
         super().__init__(fits_file,n_r,n_t,n_p,lmax,Rs)
         self.Rcp       = Rcp
@@ -145,12 +157,15 @@ class scs_solver(pfss_solver):
         self.mask      = None
         self.scs_file  = './Brtp_scs.npy'
         self.save_name = 'scs_solver.pkl'
-        self._initialization()
+        self.Alm = kwargs.get('Alm', self.Alm)
+        self.Blm = kwargs.get('Blm', self.Blm)
+        self._initialization(**kwargs)
 
-    def _initialization(self):
+    def _initialization(self,**kwargs):
         lmax  = self.lmax_scs
         Nt,Np = self.Nrtp_scs[1:]
         Rcp   = self.Rcp
+        cusp_method = kwargs.get('cusp_method', 'harmonics')
         dth   = np.pi/Nt
         dph   = np.pi/Np*2
         t_list   = np.linspace(0,  np.pi,Nt+1)[:-1]+0.5*dth
@@ -159,11 +174,16 @@ class scs_solver(pfss_solver):
         Tcp,Pcp  = np.meshgrid(t_list,p_list,indexing='ij')
         rr,tt,pp = np.meshgrid(np.array([Rcp]), t_list, p_list, indexing='ij')
         rtp_cp   = np.stack([rr,tt,pp], axis=0)
-        Brtp_cp  = super().get_Brtp(rtp_cp)
-        Br_cp,Bt_cp,Bp_cp = Brtp_cp[:,0,:,:]
+        Brtp_cp  = kwargs.get('Brtp_cusp', None)
+        if Brtp_cp is None:
+            # Build the cusp field from the same PFSS representation used later for
+            # stitched harmonics evaluation, instead of mixing PFSS interpolation
+            # here with PFSS harmonics below the interface.
+            Brtp_cp = super().get_Brtp(rtp_cp, method=cusp_method, **kwargs)
+        Br_cp,Bt_cp,Bp_cp = Brtp_cp[:,0,:,:].copy()
         self.mask= Br_cp<0
         Br_cp,Bt_cp,Bp_cp = reorientation(Br_cp, Bt_cp, Bp_cp)
-        alpha_beta_mat = get_alpha_beta_mat(t_list, p_list, lmax=10)
+        alpha_beta_mat = get_alpha_beta_mat(t_list, p_list, lmax=lmax)
         AB_mat = np.matmul(alpha_beta_mat, alpha_beta_mat.T)
         B_hat  = np.hstack([Br_cp.flatten(),Bt_cp.flatten(),Bp_cp.flatten()])
         GH_hat = np.matmul(np.linalg.inv(AB_mat),np.matmul(alpha_beta_mat,B_hat))
@@ -176,7 +196,7 @@ class scs_solver(pfss_solver):
                 glm[l][m] = G[(l+1)*l//2+m]
         for l in range(lmax+1):
             hlm[l][0]=0
-            for m in range(1,lmax+1):
+            for m in range(1,l+1):
                 hlm[l][m] = H[l*(l-1)//2+m-1]
         self.glm = glm
         self.hlm = hlm
@@ -206,6 +226,7 @@ class scs_solver(pfss_solver):
         hlm       = self.hlm
         rr,tt,pp  = self.get_rtp()
         Nr,Nt,Np  = self.Nrtp_scs
+        kwargs.setdefault('Rcp', self.Rcp)
         Br,Bt,Bp  = build_SCS_Brtp(rr,tt,pp,glm,hlm,lmax=lmax,**kwargs)
         mask      = self.mask[np.newaxis,:,:].repeat(Nr,axis=0)
         ret       = np.stack([Br,Bt,Bp])
@@ -222,12 +243,12 @@ class scs_solver(pfss_solver):
         self.plot(Br,title=title,**kwargs)
 
     def save_vts(self, **kwargs):
-        vts_name = kwargs.pop('vts_name', 'csc')
+        vts_name = kwargs.pop('vts_name', 'scs')
         Brtp     = kwargs.pop('Brtp', np.load(self.scs_file))
         super().save_vts(vts_name=vts_name, Brtp=Brtp, **kwargs)
 
     def save_vtu(self, **kwargs):
-        vtu_name = kwargs.pop('vtu_name', 'csc')
+        vtu_name = kwargs.pop('vtu_name', 'scs')
         Brtp     = kwargs.pop('Brtp', np.load(self.scs_file))
         super().save_vtu(vtu_name=vtu_name, Brtp=Brtp,**kwargs)
 
@@ -235,20 +256,132 @@ class scs_solver(pfss_solver):
         Brtp = np.load(self.scs_file)
         return Brtp
 
+    def _get_mask_at(self, tt, pp):
+        """Get polarity mask values at arbitrary (theta, phi) via nearest-neighbor lookup.
+
+        The mask is defined on the cusp-surface angular grid (Nt x Np).
+        This method maps arbitrary (theta, phi) to the nearest grid cell
+        and returns the stored polarity flag.
+        """
+        Nt, Np = self.mask.shape
+        dth = np.pi / Nt
+        dph = 2 * np.pi / Np
+        if isinstance(tt, np.ndarray):
+            it = np.clip(np.round((np.pi - tt) / dth - 0.5).astype(int), 0, Nt - 1)
+            ip = np.round(pp / dph - 0.5).astype(int) % Np
+            return self.mask[it, ip]
+        else:
+            it = int(np.clip(round((np.pi - tt) / dth - 0.5), 0, Nt - 1))
+            ip = int(round(pp / dph - 0.5)) % Np
+            return self.mask[it, ip]
+
     def get_Brtp(self, rtp, **kwargs):
-        rtp      = np.stack(rtp)
+        """
+        Get the magnetic field at arbitrary (r, theta, phi) positions.
+
+        Parameters:
+            rtp          : spherical coordinates [r, theta, phi]
+            method (str) : 'interpolation' uses pre-computed grid data (default);
+                           'harmonics' evaluates directly from spherical harmonic
+                           coefficients (Alm/Blm for PFSS, glm/hlm for SCS),
+                           no pre-computed grid files needed.
+            device (str) : torch device, used by 'harmonics' method.
+            sc_split_radius (float, optional): radius where PFSS ends and SCS starts.
+                Default ``None`` uses ``self.Rs`` (PFSS source surface, i.e. R_pfss):
+                PFSS for r <= Rs, SCS for r > Rs. The SCS multipole expansion still uses
+                ``Rcp`` (cusp / R_hat) inside ``build_SCS_Brtp``. Pass ``self.Rcp`` to
+                restore the previous behaviour (split at the cusp surface).
+            interface_blend_half_width (float, optional): if > 0, use smooth blending
+                around ``sc_split_radius`` for harmonics evaluation. In the transition
+                layer [split_r-w, split_r+w], return
+                w_pfss * B_pfss + (1-w_pfss) * B_scs to suppress interface jumps.
+        """
+        rtp      = np.asarray(rtp, dtype=float)
+        scalar = rtp.ndim == 1
+        if scalar:
+            return self.get_Brtp(rtp[:, None], **kwargs)[:, 0]
         method   = kwargs.pop('method', 'interpolation')
+        _split = kwargs.pop('sc_split_radius', None)
+        split_r = float(self.Rs if _split is None else _split)
+        _bw = kwargs.pop('interface_blend_half_width', 0.0)
+        blend_hw = 0.0 if _bw is None else float(_bw)
+        r, t, p  = rtp
+
+        # ===== harmonics: direct evaluation from coefficients =====
+        if method == 'harmonics':
+            def _eval_scs(rr_u, tt_u, pp_u):
+                build_kw = {'Rcp': self.Rcp}
+                if 'device' in kwargs:
+                    build_kw['device'] = kwargs['device']
+                ret_s = build_SCS_Brtp(rr_u, tt_u, pp_u, self.glm, self.hlm,
+                                       lmax=self.lmax_scs, **build_kw)
+                mask_s = self._get_mask_at(tt_u, pp_u)
+                ret_s[:, mask_s] = -ret_s[:, mask_s]
+                return ret_s
+
+            if isinstance(r, np.ndarray):
+                ret = np.zeros_like(rtp)
+                if blend_hw > 0:
+                    r_lo = split_r - blend_hw
+                    r_hi = split_r + blend_hw
+                    region_pfss = r < r_lo
+                    region_scs = r > r_hi
+                    region_blend = ~(region_pfss | region_scs)
+                else:
+                    region_scs = r > split_r
+                    region_pfss = ~region_scs
+                    region_blend = np.zeros_like(r, dtype=bool)
+
+                if np.any(region_pfss):
+                    rtp_lower = rtp[:, region_pfss]
+                    ret_lower = super().get_Brtp(rtp_lower, method='harmonics', **kwargs)
+                    ret[:, region_pfss] = ret_lower
+
+                if np.any(region_scs):
+                    rtp_upper            = rtp[:, region_scs]
+                    rr_u, tt_u, pp_u     = rtp_upper
+                    ret_upper = _eval_scs(rr_u, tt_u, pp_u)
+                    ret[:, region_scs] = ret_upper
+
+                if np.any(region_blend):
+                    rtp_mid = rtp[:, region_blend]
+                    rr_m, tt_m, pp_m = rtp_mid
+                    ret_pfss = super().get_Brtp(rtp_mid, method='harmonics', **kwargs)
+                    ret_scs = _eval_scs(rr_m, tt_m, pp_m)
+                    w_pfss = _pfss_weight_smooth(rr_m, split_r, blend_hw)[np.newaxis, ...]
+                    ret[:, region_blend] = w_pfss * ret_pfss + (1.0 - w_pfss) * ret_scs
+
+            elif isinstance(r, (int, float, complex)):
+                r0 = float(r)
+                if blend_hw > 0 and (split_r - blend_hw) <= r0 <= (split_r + blend_hw):
+                    rr_s = np.array([r])
+                    tt_s = np.array([t])
+                    pp_s = np.array([p])
+                    rtp_s = np.stack([rr_s, tt_s, pp_s], axis=0)
+                    ret_pfss = super().get_Brtp(rtp_s, method='harmonics', **kwargs)
+                    ret_scs = _eval_scs(rr_s, tt_s, pp_s)
+                    w_pfss = _pfss_weight_smooth(r0, split_r, blend_hw)
+                    ret = (w_pfss * ret_pfss + (1.0 - w_pfss) * ret_scs)[:, 0]
+                elif r0 <= split_r:
+                    ret = super().get_Brtp(rtp, method='harmonics', **kwargs)
+                else:
+                    rr_s     = np.array([r])
+                    tt_s     = np.array([t])
+                    pp_s     = np.array([p])
+                    ret = _eval_scs(rr_s, tt_s, pp_s)
+                    ret = ret[:, 0]
+            else:
+                raise ValueError('params `rtp` should be a numpy array or Scalar...')
+            return ret
+
+        # ===== interpolation: lookup from pre-computed grid data =====
         Bfile    = kwargs.pop('load_file', self.scs_file)
         Brtp     = np.load(Bfile)
         pfss     = np.load(kwargs.get('pfss_file', self.pfss_file))
-        r,t,p    = rtp
         Nr,Nt,Np = self.Nrtp_scs
-        if method!='interpolation':
-            warnings.warn("`method` in SCS module supports only 'interpolation'.", UserWarning)
-            method='interpolation'
         if isinstance(r,np.ndarray):
-            region_pfss = r< self.Rcp
-            region_scs  = r>=self.Rcp
+            region_scs = r > split_r
+            region_pfss = ~region_scs
             rtp_lower   = rtp[:,region_pfss]
             rtp_upper   = rtp[:,region_scs]
             rr,tt,pp    = rtp_lower
@@ -279,7 +412,7 @@ class scs_solver(pfss_solver):
             ret[:,region_pfss] = ret_lower
             ret[:,region_scs]  = ret_upper
         elif isinstance(r, (int, float, complex)):
-            if r<self.Rcp:
+            if float(r) <= split_r:
                 ret = super().get_Brtp(rtp)
             else:
                 ir  = (r-self.Rcp)/(self.Rtp-self.Rcp)*(Nr-1)

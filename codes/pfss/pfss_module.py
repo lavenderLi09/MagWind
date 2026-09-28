@@ -94,7 +94,7 @@ class pfss_solver():
         self.__dict__.update(state)
         # 重新加载或初始化属性
         self.fig     = None
-        self.hmi_map = sunpy.map.Map(self.fits_file)
+        self.hmi_map = sunpy.map.Map(self.fits_file) if self.fits_file is not None else None
 
     def _resampling_Br(self):
         '''
@@ -232,30 +232,37 @@ class pfss_solver():
         PF         = kwargs.get('pfss_file', self.pfss_file)
         if D is None:
             D      = 'cuda'  if torch.cuda.is_available() else 'cpu'
-        command    = f"python -u -m pfss.pfss_script -f {F} -nr {NR} -nt {NT} -np {NP} -l {L} -rs {RS} --err {err} "+\
+        PY         = kwargs.get('python', sys.executable)
+        command    = f"{PY} -u -m pfss.pfss_script -f {F} -nr {NR} -nt {NT} -np {NP} -l {L} -rs {RS} --err {err} "+\
                      f"--n1_print {N1} --n2_print {N2} --n_cores {NC} --device {D}"
         command    = command if not S  else command + " --save_coef"
         command    = command if not FM else command + " --fast_mode"
         command    = command if not LC else command + " --load_coef"
         command    = command if not SB else command + " --skip_Brtp"
-        command    = command if not SC else command + " --save_coef"
-        ret        = os.system(command)
+        bound = kwargs.get('bound', self.Br)
+        if bound is not None:
+            np.save('temp_bound.npy', bound)
+            command += ' --bound temp_bound.npy'
+        subprocess.run(command, shell=True, check=True)
         Brtp       = np.load('./Brtp.npz')
         Br         = Brtp['Br']
         Bp         = Brtp['Bp']
         Bt         = Brtp['Bt']
         self.Br_SS = Br[-1]
         self.Br_BB = Br[0]
-        Brtp       = np.stack([Br,Bp,Bt], axis=0)
+        Brtp       = np.stack([Br,Bt,Bp], axis=0)
         # os.remove('./Brtp.npz')
-        np.save(self.pfss_file, Brtp)
+        self.pfss_file = PF
+        np.save(PF, Brtp)
         self.Brtp  = Brtp
         return Brtp
 
     def load_Brtp(self,**kwargs):
-        load_file = kwargs.get('load_file', './Brtp.npz')
-        Brtp      = np.load(load_file)
-        Brtp      = np.stack([Brtp['Br'],Brtp['Bt'],Brtp['Bp']], axis=0)
+        load_file = kwargs.get('load_file', self.pfss_file)
+        Brtp = np.load(load_file)
+        if isinstance(Brtp, np.lib.npyio.NpzFile):
+            with Brtp:
+                Brtp = np.stack([Brtp['Br'], Brtp['Bt'], Brtp['Bp']], axis=0)
         self.Brtp = Brtp
         return Brtp
 
@@ -310,7 +317,7 @@ class pfss_solver():
         PY = kwargs.get('python'   , 'python ')
         SC = kwargs.get('save_coef', False    )
         PF = kwargs.get('pfss_file', self.pfss_file)
-        BD = kwargs.get('bound'    , None     )
+        BD = kwargs.get('bound'    , self.Br  )
         R  = kwargs.get('rtp'      , None     )
         Ds = devices
         self.pfss_file=PF
@@ -341,6 +348,7 @@ class pfss_solver():
         os.makedirs('./Brtp_temp_files/', exist_ok=True)
         log_files = [os.path.join('./Brtp_temp_files',f'{i:04}.out') for i in range(nD)]
         part = PY+f" -u -m pfss.pfss_script -f {F} -l {L} --n1_print {N1} --n2_print {N2} "
+        part += f" -nr {self.n_r} -nt {self.n_t} -np {self.n_p} -rs {self.Rs} "
         if BD is not None:
             np.save('temp_bound.npy', BD)
             part = part+' --bound temp_bound.npy '
@@ -370,8 +378,9 @@ class pfss_solver():
             process = subprocess.Popen(command, shell=True)
             processes.append(process)
         
-        for process in processes:
-            process.wait()
+        returncodes = [process.wait() for process in processes]
+        if any(code != 0 for code in returncodes):
+            raise RuntimeError(f"PFSS child process failed: return codes {returncodes}")
 
         Brtp_files = sorted(glob.glob('./Brtp_temp_files/*.npz'))
         first = True
@@ -386,6 +395,12 @@ class pfss_solver():
                 Br += Brtp['Br']
                 Bt += Brtp['Bt']
                 Bp += Brtp['Bp']
+        if first and FM and nD == 1:
+            with np.load('./Brtp.npz') as field:
+                Br, Bt, Bp = field['Br'], field['Bt'], field['Bp']
+            first = False
+        if first:
+            raise RuntimeError('PFSS workers produced no field files; inspect Brtp_temp_files logs')
         np.savez('./Brtp.npz',**dict(Br=Br,Bt=Bt,Bp=Bp))
         print(f'!!! Build the PFSS model successfully.  Total Time: {(time.time()-t0)/60:8.3} min !!!')
         out_files = sorted(glob.glob('./Brtp_temp_files/*.out'))
@@ -403,18 +418,16 @@ class pfss_solver():
         return np.stack([Br,Bt,Bp], axis=0)
 
     def get_Brtp(self, rtp, **kwargs):
+        rtp = np.asarray(rtp, dtype=float)
+        if rtp.ndim == 1:
+            return self.get_Brtp(rtp[:, None], **kwargs)[:, 0]
         method   = kwargs.get('method'   , 'interpolation')
-        Bfile    = kwargs.get('load_file', './Brtp.npz'   )
+        Bfile    = kwargs.get('load_file', self.pfss_file )
         # print('Bfile: ', Bfile)
         rr,tt,pp = rtp
         if method=='interpolation':
             if self.Brtp is None:
-                Brtp     = np.load(Bfile)
-                Br       = Brtp['Br']
-                Bp       = Brtp['Bp']
-                Bt       = Brtp['Bt']
-                Brtp     = np.stack([Br,Bt,Bp], axis=-1)
-                self.Brtp = Brtp.transpose(3,0,1,2)
+                Brtp = pfss_solver.load_Brtp(self, load_file=Bfile).transpose(1,2,3,0)
             else:
                 Brtp = self.Brtp.transpose(1,2,3,0)
             ir       = (rr   - 1)/(self.Rs-1)*(self.n_r-1)
@@ -460,7 +473,7 @@ class pfss_solver():
                         Br+=br
                         Bt+=bt
                         Bp+=bp
-                        if l!=0:
+                        if m!=0:
                             br,bt,bp = Brtp_lm(l,-m,rr,tt,pp,err=err,device=device,P_l00=P_l00,P_lp1=P_lp1,Alm=Alm,Blm=Blm)
                             Br+=br
                             Bt+=bt
@@ -473,7 +486,7 @@ class pfss_solver():
                         Br+=br
                         Bt+=bt
                         Bp+=bp
-                        if l!=0:
+                        if m!=0:
                             br,bt,bp = Brtp_lm(l,-m,rr,tt,pp,err=err,device=device,P_l00=P_l00,P_lp1=P_lp1,Alm=Alm,Blm=Blm)
                             Br+=br
                             Bt+=bt
