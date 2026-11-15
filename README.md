@@ -40,6 +40,7 @@ MagWind is a Python research package for extrapolating coronal magnetic fields f
 | Model | Calculation | Main controls |
 | :--- | :--- | :--- |
 | **PFSS** — Potential Field Source Surface | A potential magnetic field with a radial-field boundary at the source surface. | `lmax`, source radius `Rs`, mesh dimensions |
+| [Finite-difference PFSS](codes/fdips_pfss/README.md) | Staggered-grid potential solve with a Fourier transform in longitude and direct radial solves. Includes the AR11158 GONG–ADAPT example and MF field export. | Photospheric radial field, radial and angular grid |
 | **SCS** — Schatten Current Sheet | Reorient the PFSS cusp field, fit an outer potential field, and restore polarity. Supports direct harmonic evaluation and a selectable PFSS/SCS interface. | Cusp radius `Rcp`, `lmax_scs`, outer radius `Rtp`, `sc_split_radius` |
 | **OFF** — Outflow Field | A magnetic equilibrium with a prescribed radial wind in the magneto-frictional formulation, following Rice & Yeates (2021). | `v1`, `Rs`, `lmax`, radial integration |
 
