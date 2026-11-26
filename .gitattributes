@@ -1,0 +1,3 @@
+**/.ipynb_checkpoints export-ignore
+**/__pycache__ export-ignore
+**/*.egg-info export-ignore

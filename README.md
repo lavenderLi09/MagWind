@@ -6,6 +6,21 @@ MagWind is a Python research package for extrapolating coronal magnetic fields f
 
 [Gallery](#global-magnetic-field-gallery) · [Models](#models) · [Install](#installation) · [Quick start](#quick-start) · [Validation](#validation-and-recent-corrections) · [Calculation notes](docs/calculation-update.md)
 
+## Run a global PFSS notebook
+
+Download and extract the source ZIP. From its top-level folder, run the following in a fresh Python environment (Python 3.12 recommended).
+
+```sh
+python -m pip install ".[notebook]"
+python -m jupyterlab Global_PFSS.ipynb
+```
+
+[Open the notebook](Global_PFSS.ipynb). Choose a global radial-field FITS map, source-surface radius, mesh and method. The default HMI CR2219 example runs on a CPU. The notebook writes the three spherical field components, their coordinates, the balanced input and the subtracted mean to an NPZ beside the notebook. Running the same settings again replaces that file.
+
+The reader accepts complete 2D Carrington CEA or CAR maps in gauss, with axis-aligned longitude and latitude axes. For HMI CEA it reads the sine-latitude increment and longitude direction from the header. Both methods average by overlap in longitude and sine latitude and subtract the area-weighted mean. Supply radial field; convert line-of-sight data separately. Regular-latitude GONG–ADAPT cubes use the ensemble mean. For the original AR11158 mesh and MF export, use the [AR11158 reproduction example](codes/fdips_pfss/README.md).
+
+The CPU harmonic path uses MagWind’s midpoint projection and source-surface radial factors, evaluates normalized harmonics with SciPy, and excludes the monopole. Its photospheric reconstruction is truncated at `lmax`. The finite-difference option uses MagWind’s staggered direct solver, imposes the balanced map on the inner faces, and uses the mesh to set its resolution. Longitude is unwrapped from the first increasing cell edge. The notebook's boundary preparation and mesh can differ from legacy HPC runs.
+
 ## Global magnetic field gallery
 
 <p align="center">

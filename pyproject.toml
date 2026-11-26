@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "magwind-global-pfss"
+version = "0.1.0"
+description = "Global potential fields from radial Carrington magnetograms"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24", "scipy>=1.15", "astropy>=6"]
+
+[project.optional-dependencies]
+notebook = ["jupyterlab", "matplotlib"]
+
+[tool.setuptools]
+package-dir = {"" = "codes"}
+packages = ["fdips_pfss"]
+
+[tool.setuptools.package-data]
+fdips_pfss = ["ar11158_grid.npz"]

@@ -51,8 +51,9 @@ def staggered_solve(r, faces, theta, bottom):
     residual = radial_flux+theta_flux+phi_flux
     volumes = np.diff(r**3)[:, None, None]/3*mu[None, :, None]*dp
     bottom_flux = r[0]**2*bottom*mu[:, None]*dp
-    check = dict(relative_flux_residual_L2=float(np.linalg.norm(residual.ravel())/
-                                                  np.linalg.norm(bottom_flux.ravel())),
+    flux_norm = np.linalg.norm(bottom_flux.ravel())
+    relative_residual = np.linalg.norm(residual.ravel()) / flux_norm if flux_norm else 0.0
+    check = dict(relative_flux_residual_L2=float(relative_residual),
                  max_abs_div_G_per_Rsun=float(np.max(abs(residual/volumes))))
     assert check["relative_flux_residual_L2"] < 1e-9, check
     return potential, br, bt, bp, check
